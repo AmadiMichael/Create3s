@@ -2,5 +2,9 @@
 src = "src"
 out = "out"
 libs = ["lib"]
+isolate = true
+solc_version = "0.8.28"
 
+[fuzz]
+runs = 1_000_000
 # See more config options https://github.com/foundry-rs/foundry/blob/master/crates/config/README.md#all-options
