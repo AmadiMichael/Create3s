@@ -72,7 +72,7 @@ contract Create3sTest is Test {
 
         for (uint256 i; i < ITERATIONS; ++i) {
             console2.log("erasing contract");
-            _eraseContract(c);
+            destroyAccount(c, address(0));
 
             console2.log("Creating contract again");
             address d = create3s.create(_filterCode(_initCodes[i]), _salt);
@@ -92,23 +92,12 @@ contract Create3sTest is Test {
         assertTrue(abi.decode(data, (bool)), "initialize call should return true");
     }
 
-    /// @dev This basically acts like selfdestruct and makes it possible to deploy code to the address again.
-    function _eraseContract(address _contract) private {
-        vm.etch(_contract, hex"");
-        vm.resetNonce(_contract);
-    }
-
     function _filterCode(bytes memory _code) private pure returns (bytes memory) {
         if (_code.length > 0 && _code[0] == hex"ef") {
             _code[0] = hex"60";
         }
         return _code;
     }
-
-    // /// @dev This returns a random number of bytes between 0 and 10 * 1024.
-    // function _randomBytes() private returns (bytes memory) {
-    //     return vm.randomBytes(bound(vm.randomUint(), 0, 10 * 1024));
-    // }
 }
 
 contract A {
