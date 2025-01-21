@@ -15,6 +15,26 @@ contract Create3sTest is Test {
         create3s = new Create3s();
     }
 
+    function test_bench_print_create3_and_create3s() external {
+        uint256 salt = 0;
+
+        console2.log("| Code Size (bytes) | `Create3s` Gas | Create3 Gas |");
+        console2.log("| ----------------- | ------------ | ----------- |");
+        for (uint256 i = 0; i < 4_000; i += 50) {
+            bytes memory code = vm.randomBytes(i);
+            code = _filterCode(code);
+
+            create3s.create(code, bytes32(salt));
+            uint256 create3sGasUsed = vm.lastCallGas().gasTotalUsed;
+
+            B b = new B();
+            b.c(bytes.concat(RETURNER, code), bytes32(salt++));
+            uint256 create3GasUsed = vm.lastCallGas().gasTotalUsed;
+
+            console2.log("%s | %s | %s", i, create3sGasUsed, create3GasUsed);
+        }
+    }
+
     /// @dev The last output is the smallest length of code to deploy whereby using create3s is cheaper than create3.
     /// @dev Currently at 3744 bytes or 3.65KB
     function test_bench_create3_and_create3s() external {
