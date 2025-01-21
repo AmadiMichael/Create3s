@@ -41,31 +41,52 @@ pragma solidity ^0.8.0;
  */
 error Create3xDeploymentFailed();
 error ExpectedAddressNotSameAsActualAddress();
+error CodeDeploymentFailed();
+error InitCallFailed();
 
 contract Create3s {
     bytes private constant DEPLOYMENT_CODE = hex"5f5f5f5f5f335af1600e575f5ffd5b3d5f5f3e3d5ff3";
     bytes32 private constant CODE_HASH = keccak256(DEPLOYMENT_CODE);
 
-    function create(bytes memory _initCode, bytes32 _salt) external payable returns (address x) {
-        _storeCode(_initCode);
+    function create(bytes memory _runtimeCode, bytes32 _salt) external payable returns (address addr_) {
+        addr_ = _create(_runtimeCode, _salt);
+    }
 
-        address expected = _getAddressOf(_salt);
-        bytes memory deploymentCode = DEPLOYMENT_CODE;
-        assembly ("memory-safe") {
-            x := create2(callvalue(), add(deploymentCode, 0x20), mload(deploymentCode), _salt)
-            if iszero(x) {
-                mstore(0x00, 0x85f83ed6) // Create3xDeploymentFailed()
-                revert(0x1c, 0x04)
-            }
-            if sub(x, expected) {
-                mstore(0x00, 0x187987c5) // ExpectedAddressNotSameAsActualAddress()
-                revert(0x1c, 0x04)
-            }
-        }
+    function createAndInit(bytes memory _runtimeCode, bytes32 _salt, bytes memory _initCalldata)
+        external
+        payable
+        returns (address addr_)
+    {
+        addr_ = _create(_runtimeCode, _salt);
+
+        (bool success,) = addr_.call(_initCalldata);
+        require(success, InitCallFailed());
     }
 
     function getAddressOf(bytes32 _salt) external view returns (address addr_) {
         return _getAddressOf(_salt);
+    }
+
+    function _create(bytes memory _runtimeCode, bytes32 _salt) internal returns (address addr_) {
+        _storeCode(_runtimeCode);
+
+        address expected = _getAddressOf(_salt);
+        bytes memory deploymentCode = DEPLOYMENT_CODE;
+        assembly ("memory-safe") {
+            addr_ := create2(callvalue(), add(deploymentCode, 0x20), mload(deploymentCode), _salt)
+            if iszero(addr_) {
+                mstore(0x00, 0x85f83ed6) // Create3xDeploymentFailed()
+                revert(0x1c, 0x04)
+            }
+            if sub(addr_, expected) {
+                mstore(0x00, 0x187987c5) // ExpectedAddressNotSameAsActualAddress()
+                revert(0x1c, 0x04)
+            }
+            if sub(extcodesize(addr_), mload(_runtimeCode)) {
+                mstore(0x00, 0xfef82207) // CodeDeploymentFailed()
+                revert(0x1c, 0x04)
+            }
+        }
     }
 
     function _getAddressOf(bytes32 _salt) internal view returns (address addr_) {
@@ -81,19 +102,19 @@ contract Create3s {
         }
     }
 
-    function _storeCode(bytes memory _initCode) internal {
+    function _storeCode(bytes memory _runtimeCode) internal {
         assembly ("memory-safe") {
             function divUp(a, b) -> c {
                 c := div(sub(add(a, b), 0x01), b)
             }
 
-            let len := mload(_initCode)
-            sstore(0x00, len)
+            let len := mload(_runtimeCode)
+            tstore(0x00, len)
             let iter := divUp(len, 0x20)
             let i := 0x01
-            let dataOffset := add(_initCode, 0x20)
+            let dataOffset := add(_runtimeCode, 0x20)
             for {} 1 {} {
-                sstore(i, mload(dataOffset))
+                tstore(i, mload(dataOffset))
 
                 dataOffset := add(dataOffset, 0x20)
                 i := add(i, 1)
@@ -103,20 +124,20 @@ contract Create3s {
     }
 
     /// @dev Returns previously stored bytes from storage slot 0. Not abi.encoded.
-    function _getCode() internal returns (bytes memory) {
+    fallback() external {
         assembly {
             function divUp(a, b) -> c {
                 c := div(sub(add(a, b), 0x01), b)
             }
 
-            let len := sload(0x00)
-            sstore(0x00, 0x00)
+            let len := tload(0x00)
+            tstore(0x00, 0x00)
 
             let i := 0x01
             let o := 0x00
             let l := divUp(len, 0x20)
             for {} 1 {} {
-                mstore(o, sload(i))
+                mstore(o, tload(i))
 
                 o := add(o, 0x20)
                 i := add(i, 0x01)
@@ -125,9 +146,5 @@ contract Create3s {
 
             return(0x00, len)
         }
-    }
-
-    fallback() external {
-        _getCode();
     }
 }

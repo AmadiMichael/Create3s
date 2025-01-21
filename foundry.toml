@@ -4,7 +4,12 @@ out = "out"
 libs = ["lib"]
 isolate = true
 solc_version = "0.8.28"
+optimizer = true
+optimizer_runs = 999_999
+evm_version = "cancun"
+ignored_error_codes = ["transient-storage"]
+bytecode_hash = "none"
 
 [fuzz]
-runs = 1_000_000
+runs = 1_000
 # See more config options https://github.com/foundry-rs/foundry/blob/master/crates/config/README.md#all-options

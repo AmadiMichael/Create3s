@@ -8,50 +8,58 @@ import {Create3, B} from "test/mock/Create3.sol";
 contract Create3sTest is Test {
     Create3s public create3s;
 
+    // bytecode that returns everything after it.
+    bytes private constant RETURNER = hex"3880600e600039600e90036000f3";
+
     function setUp() public {
         create3s = new Create3s();
-
-        // warm up all possible slots in registry
-        address a = create3s.create(vm.randomBytes(24 * 1024), bytes32(0));
-        // erase contract to make it possible to deploy code to it again if the same salt is used by the tests
-        _eraseContract(a);
     }
 
+    /// @dev The last output is the smallest length of code to deploy whereby using create3s is cheaper than create3.
+    /// @dev Currently at 3744 bytes or 3.65KB
     function test_bench_create3_and_create3s() external {
         uint256 salt;
 
-        for (uint256 i = 1; i < (24 * 1024); ++i) {
-            bytes memory initCode = vm.randomBytes(i);
-            initCode = _filterInitCode(initCode);
+        uint256 l = 1;
+        uint256 r = 24 * 1024;
 
-            create3s.create(initCode, bytes32(salt));
+        while (true) {
+            uint256 i = (l + r) / 2;
+            bytes memory code = vm.randomBytes(i);
+            code = _filterCode(code);
+
+            create3s.create(code, bytes32(salt));
             uint256 create3sGasUsed = vm.lastCallGas().gasTotalUsed;
 
             B b = new B();
-            b.c(bytes.concat(hex"3880600e600039600e90036000f3", initCode), bytes32(salt++));
+            b.c(bytes.concat(RETURNER, code), bytes32(salt++));
             uint256 create3GasUsed = vm.lastCallGas().gasTotalUsed;
 
             console2.log("length:", i);
             console2.log("gas used create3s:", create3sGasUsed);
             console2.log("gas used create3:", create3GasUsed);
             console2.log("\n");
-            if (create3sGasUsed > create3GasUsed) {
+
+            if (r - l <= 1) {
                 break;
+            }
+
+            if (create3sGasUsed > create3GasUsed) {
+                r = i;
+            } else {
+                l = i;
             }
         }
     }
 
-    function test_create3(bytes calldata _initCode, bytes32 _salt) external {
-        bytes memory initCode = _initCode;
-        if (_initCode.length > 0 && _initCode[0] == hex"ef") {
-            initCode[0] = hex"60";
-        }
+    function test_create3(bytes memory _code, bytes32 _salt) external {
+        _code = _filterCode(_code);
 
         address expected = create3s.getAddressOf(_salt);
-        address actual = create3s.create(initCode, _salt);
+        address actual = create3s.create(_code, _salt);
 
         assertEq(expected, actual, "expected and actual should be the same");
-        assertEq(expected.code, initCode, "not same code");
+        assertEq(expected.code, _code, "not same code");
     }
 
     uint256 constant ITERATIONS = 100;
@@ -60,14 +68,14 @@ contract Create3sTest is Test {
     ///      the same salt that created it initially CAN be used to deploy ANY code to it again.
     function test_create_destruct_redeploy(bytes32 _salt, bytes[ITERATIONS + 1] memory _initCodes) external {
         console2.log("Creating contract");
-        address c = create3s.create(_initCodes[ITERATIONS], _salt);
+        address c = create3s.create(_filterCode(_initCodes[ITERATIONS]), _salt);
 
         for (uint256 i; i < ITERATIONS; ++i) {
             console2.log("erasing contract");
             _eraseContract(c);
 
             console2.log("Creating contract again");
-            address d = create3s.create(_initCodes[i], _salt);
+            address d = create3s.create(_filterCode(_initCodes[i]), _salt);
 
             assertEq(d, c, "d and c should be the same");
             c = d;
@@ -82,11 +90,11 @@ contract Create3sTest is Test {
         vm.resetNonce(_contract);
     }
 
-    function _filterInitCode(bytes memory _initCode) private pure returns (bytes memory) {
-        if (_initCode.length > 0 && _initCode[0] == hex"ef") {
-            _initCode[0] = hex"60";
+    function _filterCode(bytes memory _code) private pure returns (bytes memory) {
+        if (_code.length > 0 && _code[0] == hex"ef") {
+            _code[0] = hex"60";
         }
-        return _initCode;
+        return _code;
     }
 
     // /// @dev This returns a random number of bytes between 0 and 10 * 1024.
