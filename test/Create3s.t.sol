@@ -84,6 +84,14 @@ contract Create3sTest is Test {
         }
     }
 
+    function test_create3s_initialize(bytes32 _salt, uint256 _v) external {
+        (address x, bytes memory data) =
+            create3s.createAndInit(type(A).runtimeCode, _salt, abi.encodeCall(A.initialize, _v));
+
+        assertEq(A(x).v(), _v, "v should be set correctly");
+        assertTrue(abi.decode(data, (bool)), "initialize call should return true");
+    }
+
     /// @dev This basically acts like selfdestruct and makes it possible to deploy code to the address again.
     function _eraseContract(address _contract) private {
         vm.etch(_contract, hex"");
@@ -101,4 +109,30 @@ contract Create3sTest is Test {
     // function _randomBytes() private returns (bytes memory) {
     //     return vm.randomBytes(bound(vm.randomUint(), 0, 10 * 1024));
     // }
+}
+
+contract A {
+    error NotInitialized();
+
+    bool public initialized;
+    uint256 public v;
+
+    modifier initializer() {
+        initialized = true;
+        _;
+    }
+
+    modifier onlyInitialized() {
+        if (!initialized) revert NotInitialized();
+        _;
+    }
+
+    function initialize(uint256 _v) external initializer returns (bool) {
+        v = _v;
+        return true;
+    }
+
+    function setV(uint256 _v) external onlyInitialized {
+        v = _v;
+    }
 }

@@ -57,6 +57,7 @@ contract Create3s {
     /// @param _salt The salt to use for the deployment.
     /// @return addr_ The address of the deployed contract.
     function create(bytes memory _runtimeCode, bytes32 _salt) external payable returns (address addr_) {
+        // Deploy the contract.
         addr_ = _create(_runtimeCode, _salt);
     }
 
@@ -68,11 +69,14 @@ contract Create3s {
     function createAndInit(bytes memory _runtimeCode, bytes32 _salt, bytes memory _initCalldata)
         external
         payable
-        returns (address addr_)
+        returns (address addr_, bytes memory data_)
     {
+        // Deploy the contract.
         addr_ = _create(_runtimeCode, _salt);
 
-        (bool success,) = addr_.call(_initCalldata);
+        // Call the deployed contract with the initialization calldata.
+        bool success;
+        (success, data_) = addr_.call(_initCalldata);
         require(success, InitCallFailed());
     }
 
