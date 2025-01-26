@@ -46,52 +46,35 @@ pragma solidity ^0.8.0;
 error Create3xDeploymentFailed();
 error ExpectedAddressNotSameAsActualAddress();
 error CodeDeploymentFailed();
-error InitCallFailed();
+error InitCallFailed(bytes _data);
 
-contract Create3s {
+abstract contract Create3s {
+    /// @dev bytes32(uint256(keccak256("create3.storagestart")) + 1);
+    /// @dev We use +1 instead of the conventional -1 because we want to store the runtime code starting from the next slot which would mean the direct hash of the slot will hold a value.
+    bytes32 private constant CREATE3_RUNTIMECODE_LENGTH_SLOT =
+        0x8bddb84a735c354e3957c118531cb277f45d48c40123a61576226894de65cce2;
+
+    /// @dev CREATE3_RUNTIMECODE_LENGTH_SLOT + 1;
+    bytes32 private constant CREATE3_RUNTIMECODE_START =
+        0x8bddb84a735c354e3957c118531cb277f45d48c40123a61576226894de65cce3;
+
+    /// @dev The init code deployed by Create3s which returns the runtime code from Create3's transient storage.
     bytes private constant DEPLOYMENT_CODE = hex"5f5f5f5f5f335af1600e575f5ffd5b3d5f5f3e3d5ff3";
+
+    /// @dev The hash of the deployment code.
     bytes32 private constant CODE_HASH = keccak256(DEPLOYMENT_CODE);
 
-    /// @notice Creates a contract using Create3s.
-    /// @param _runtimeCode The runtime code of the contract to deploy.
-    /// @param _salt The salt to use for the deployment.
-    /// @return addr_ The address of the deployed contract.
-    function create(bytes memory _runtimeCode, bytes32 _salt) external payable returns (address addr_) {
-        // Deploy the contract.
-        addr_ = _create(_runtimeCode, _salt);
-    }
-
-    /// @notice Creates a contract using Create3s and calls it with the given initialization calldata.
-    /// @param _runtimeCode The runtime code of the contract to deploy.
-    /// @param _salt The salt to use for the deployment.
-    /// @param _initCalldata The initialization calldata to call the deployed contract with after deployment.
-    /// @return addr_ The address of the deployed contract.
-    function createAndInit(bytes memory _runtimeCode, bytes32 _salt, bytes memory _initCalldata)
-        external
-        payable
-        returns (address addr_, bytes memory data_)
-    {
-        // Deploy the contract.
-        addr_ = _create(_runtimeCode, _salt);
-
-        // Call the deployed contract with the initialization calldata.
-        bool success;
-        (success, data_) = addr_.call(_initCalldata);
-        require(success, InitCallFailed());
-    }
-
-    /// @notice Returns the expected address of the deployment.
-    /// @param _salt The salt to use for the deployment.
-    /// @return addr_ The expected address of the deployment.
-    function getAddressOf(bytes32 _salt) external view returns (address addr_) {
-        return _getAddressOf(_salt);
-    }
-
-    /// @dev Creates a contract using Create3s.
-    function _create(bytes memory _runtimeCode, bytes32 _salt) internal returns (address addr_) {
+    /// @dev Stores the runtime code to return in transient storage and then creates the contract.
+    function _storeAndCreate(bytes memory _runtimeCode, bytes32 _salt) internal returns (address addr_) {
         // Store the runtime code to return in transient storage.
         _storeCode(_runtimeCode);
 
+        // Deploy the contract.
+        addr_ = _create(_runtimeCode.length, _salt);
+    }
+
+    /// @dev Creates a contract using Create3s.
+    function _create(uint256 _runtimeCodeLength, bytes32 _salt) internal returns (address addr_) {
         // Get the expected address of the deployment.
         address expected = _getAddressOf(_salt);
 
@@ -114,7 +97,7 @@ contract Create3s {
             }
 
             // If the code size of the deployed contract is not the same as the runtime code inputted, revert.
-            if sub(extcodesize(addr_), mload(_runtimeCode)) {
+            if sub(extcodesize(addr_), _runtimeCodeLength) {
                 mstore(0x00, 0xfef82207) // CodeDeploymentFailed()
                 revert(0x1c, 0x04)
             }
@@ -148,23 +131,23 @@ contract Create3s {
             let len := mload(_runtimeCode)
 
             // Store the length in transient storage slot 0.
-            tstore(0x00, len)
+            tstore(CREATE3_RUNTIMECODE_LENGTH_SLOT, len)
 
             // Get the number of iterations needed to store the input.
-            let iter := divUp(len, 0x20)
+            let iter := add(CREATE3_RUNTIMECODE_START, divUp(len, 0x20))
 
             // Starting transient storage slot to store the input.
-            let i := 0x01
+            let i := CREATE3_RUNTIMECODE_START
 
             // Offset of the input in memory.
             let dataOffset := add(_runtimeCode, 0x20)
 
             // Store the input in transient storage.
-            for {} 1 {} {
+            for {} 0x01 {} {
                 tstore(i, mload(dataOffset))
 
                 dataOffset := add(dataOffset, 0x20)
-                i := add(i, 1)
+                i := add(i, 0x01)
                 if gt(i, iter) { break }
             }
         }
@@ -181,22 +164,22 @@ contract Create3s {
             }
 
             // Get the length of the value.
-            let len := tload(0x00)
+            let len := tload(CREATE3_RUNTIMECODE_LENGTH_SLOT)
 
             // Clear the length in transient storage slot 0.
-            tstore(0x00, 0x00)
+            tstore(CREATE3_RUNTIMECODE_LENGTH_SLOT, 0x00)
 
             // Starting transient storage slot to get the value.
-            let i := 0x01
+            let i := CREATE3_RUNTIMECODE_START
 
             // Starting offset to store the value in memory.
             let o := 0x00
 
             // Get the number of iterations needed to get the value.
-            let l := divUp(len, 0x20)
+            let l := add(CREATE3_RUNTIMECODE_START, divUp(len, 0x20))
 
             // Get the value from transient storage.
-            for {} 1 {} {
+            for {} 0x01 {} {
                 mstore(o, tload(i))
 
                 o := add(o, 0x20)

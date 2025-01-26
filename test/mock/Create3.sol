@@ -5,6 +5,10 @@ contract B {
     function c(bytes memory x, bytes32 salt) external returns (address) {
         return Create3.create3(salt, x);
     }
+
+    function getAddressOf(bytes32 salt) external view returns (address) {
+        return Create3.addressOf(salt);
+    }
 }
 
 /**

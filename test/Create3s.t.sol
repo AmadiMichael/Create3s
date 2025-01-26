@@ -2,20 +2,20 @@
 pragma solidity ^0.8.13;
 
 import {Test, console2} from "forge-std/Test.sol";
-import {Create3s} from "src/Create3s.sol";
+import {Create3sFactory} from "src/Create3sFactory.sol";
 import {Create3, B} from "test/mock/Create3.sol";
 
 contract Create3sTest is Test {
-    Create3s public create3s;
+    Create3sFactory public create3s;
 
     // bytecode that returns everything after it.
     bytes private constant RETURNER = hex"3880600e600039600e90036000f3";
 
     function setUp() public {
-        create3s = new Create3s();
+        create3s = new Create3sFactory();
     }
 
-    function test_bench_print_create3_and_create3s() external {
+    function test_bench_print_create3_and_create3s_create() external {
         uint256 salt = 0;
 
         console2.log("| Code Size (bytes) | `Create3s` Gas | Create3 Gas |");
@@ -33,6 +33,17 @@ contract Create3sTest is Test {
 
             console2.log("%s | %s | %s", i, create3sGasUsed, create3GasUsed);
         }
+    }
+
+    function test_bench_print_create3_and_create3s_getAddressOf(bytes32 _salt) external {
+        create3s.getAddressOf(_salt);
+        uint256 create3sGasUsed = vm.lastCallGas().gasTotalUsed;
+
+        B b = new B();
+        b.getAddressOf(_salt);
+        uint256 create3GasUsed = vm.lastCallGas().gasTotalUsed;
+
+        console2.log("%s | %s", create3sGasUsed, create3GasUsed);
     }
 
     /// @dev The last output is the smallest length of code to deploy whereby using create3s is cheaper than create3.
