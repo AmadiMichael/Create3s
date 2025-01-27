@@ -49,14 +49,14 @@ error CodeDeploymentFailed();
 error InitCallFailed(bytes _data);
 
 abstract contract Create3s {
-    /// @dev bytes32(uint256(keccak256("create3.storagestart")) + 1);
+    /// @dev bytes32(uint256(keccak256("create3s.storagestart")) + 1);
     /// @dev We use +1 instead of the conventional -1 because we want to store the runtime code starting from the next slot which would mean the direct hash of the slot will hold a value.
     bytes32 private constant CREATE3_RUNTIMECODE_LENGTH_SLOT =
-        0x8bddb84a735c354e3957c118531cb277f45d48c40123a61576226894de65cce2;
+        0x876fda392913547f01bbb8ccfe576f8f23aa1f117d767d634afdcd1dde0340f8;
 
     /// @dev CREATE3_RUNTIMECODE_LENGTH_SLOT + 1;
     bytes32 private constant CREATE3_RUNTIMECODE_START =
-        0x8bddb84a735c354e3957c118531cb277f45d48c40123a61576226894de65cce3;
+        0x876fda392913547f01bbb8ccfe576f8f23aa1f117d767d634afdcd1dde0340f9;
 
     /// @dev The init code deployed by Create3s which returns the runtime code from Create3's transient storage.
     bytes private constant DEPLOYMENT_CODE = hex"5f5f5f5f5f335af1600e575f5ffd5b3d5f5f3e3d5ff3";
@@ -124,6 +124,7 @@ abstract contract Create3s {
     function _storeCode(bytes memory _runtimeCode) internal {
         assembly ("memory-safe") {
             function divUp(a, b) -> c {
+                // No need to check that b != 0 since in all usages of `divUp` we never input b as 0.
                 c := div(sub(add(a, b), 0x01), b)
             }
 
@@ -157,9 +158,10 @@ abstract contract Create3s {
     /// @dev Length of the value is stored in transient storage slot 0.
     ///      Rest of the bytes are stored in subsequent transient storage slots.
     ///      The return value is not abi encoded since it is intended to be returned as runtime code.
-    fallback() external {
+    function _clearAndReturnCode() internal {
         assembly {
             function divUp(a, b) -> c {
+                // No need to check that b != 0 since in all usages of `divUp` we never input b as 0.
                 c := div(sub(add(a, b), 0x01), b)
             }
 
@@ -190,5 +192,14 @@ abstract contract Create3s {
             // Return the value from memory.
             return(0x00, len)
         }
+    }
+
+    /// @dev Fallback function, can be overriden to support more features.
+    /// @dev If overiding, ENSURE TO CALL `_clearAndReturnCode()`.
+    ///      In this scenario a recommended solution is to store the precalculated contract address to be deployed
+    ///      in transient storage, then only call _clearAndReturnCode() if msg.sender is that address and optionally
+    ///      if calldatasize is 0 for instances where your new fallback use case might be called by the deployed contract after deployment.
+    fallback() external virtual {
+        _clearAndReturnCode();
     }
 }
