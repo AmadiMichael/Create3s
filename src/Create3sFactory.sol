@@ -40,6 +40,6 @@ contract Create3sFactory is Create3s {
     /// @param _salt The salt to use for the deployment.
     /// @return addr_ The expected address of the deployment.
     function getAddressOf(bytes32 _salt) external view returns (address addr_) {
-        return _getAddressOf(_salt);
+        addr_ = _getAddressOf(_salt);
     }
 }

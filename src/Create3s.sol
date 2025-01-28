@@ -62,7 +62,7 @@ abstract contract Create3s {
     bytes private constant DEPLOYMENT_CODE = hex"5f5f5f5f5f335af1600e575f5ffd5b3d5f5f3e3d5ff3";
 
     /// @dev The hash of the deployment code.
-    bytes32 private constant CODE_HASH = keccak256(DEPLOYMENT_CODE);
+    bytes32 private constant CODE_HASH = 0xf9baecd271d3e1d395e8a99ffbeb132ec600282ce4e7600ef789bca0e46b3e31;
 
     /// @dev Stores the runtime code to return in transient storage and then creates the contract.
     function _storeAndCreate(bytes memory _runtimeCode, bytes32 _salt) internal returns (address addr_) {
@@ -74,6 +74,8 @@ abstract contract Create3s {
     }
 
     /// @dev Creates a contract using Create3s.
+    /// @dev Note that the call to create2 here is reentrant safe as long as this contract's fallback function does not have additional logic in inheriting contracts,
+    ///      since the deployer bytecode only calls back into this contract and returns the returned bytecode.
     function _create(uint256 _runtimeCodeLength, bytes32 _salt) internal returns (address addr_) {
         // Get the expected address of the deployment.
         address expected = _getAddressOf(_salt);
@@ -106,13 +108,12 @@ abstract contract Create3s {
 
     /// @dev Returns the expected address of the deployment.
     function _getAddressOf(bytes32 _salt) internal view returns (address addr_) {
-        bytes32 codeHash = CODE_HASH;
-        assembly ("memory-safe") {
+        assembly {
             let fmp := mload(0x40)
             mstore(fmp, hex"ff")
             mstore(add(fmp, 0x01), shl(0x60, address()))
             mstore(add(fmp, 0x15), _salt)
-            mstore(add(fmp, 0x35), codeHash)
+            mstore(add(fmp, 0x35), CODE_HASH)
             let hash := keccak256(fmp, 0x55)
             addr_ := and(hash, 0xffffffffffffffffffffffffffffffffffffffff)
         }
@@ -194,12 +195,33 @@ abstract contract Create3s {
         }
     }
 
-    /// @dev Fallback function, can be overriden to support more features.
-    /// @dev If overiding, ENSURE TO CALL `_clearAndReturnCode()`.
+    /// @dev Fallback function, can be overridden to support more features.
+    /// @dev If overriding, ENSURE TO CALL `_clearAndReturnCode()`.
     ///      In this scenario a recommended solution is to store the precalculated contract address to be deployed
     ///      in transient storage, then only call _clearAndReturnCode() if msg.sender is that address and optionally
     ///      if calldatasize is 0 for instances where your new fallback use case might be called by the deployed contract after deployment.
-    fallback() external virtual {
+    fallback() external {
+        // Runs the beforeFallback function.
+        _beforeClearAndReturnCode();
+
+        // Clear and return the code.
         _clearAndReturnCode();
     }
+
+    /// @dev This function runs before the `_clearAndReturnCode()` function is run in the fallback function.
+    /// @dev This is useful for instances where you might want to run some logic before the code is returned to the contract being deployed.
+    ///      Or, to have additional logic in the fallback function. This can be conveniently achieved by only calling `_clearAndReturnCode()` if msg.sender is the address of the deployed contract (ideally stored in transient storage).
+    ///      and otherwise, running your logic and ending execution successfully that way `_clearAndReturnCode()` is not called.
+    function _beforeClearAndReturnCode() internal virtual {}
+
+    // forgefmt: disable-next-item
+    /// @dev This function ends execution successfully.
+    ///      Can be called after running your logic in the `_beforeClearAndReturnCode()` function if you need to return a value.
+    function _endExecutionSuccessfully() internal pure { assembly("memory-safe") { stop() } }
+
+    // forgefmt: disable-next-item
+    /// @dev This function returns the value given to it, ending execution successfully also.
+    ///      Can be called after running your logic in the `_beforeClearAndReturnCode()` function if you need to return a value.
+    /// @dev All values that are expected to be abi decoded by the caller of this function should be abi encoded before using as input here.
+    function _return(bytes memory _value) internal pure { assembly("memory-safe") { return(add(_value, 0x20), mload(_value)) } }
 }

@@ -9,7 +9,7 @@ contract Create3sTest is Test {
     Create3sFactory public create3s;
 
     // bytecode that returns everything after it.
-    bytes private constant RETURNER = hex"3880600e600039600e90036000f3";
+    bytes private constant RETURNER = hex"600b80380380915f395ff3";
 
     function setUp() public {
         create3s = new Create3sFactory();
@@ -20,7 +20,7 @@ contract Create3sTest is Test {
 
         console2.log("| Code Size (bytes) | `Create3s` Gas | Create3 Gas |");
         console2.log("| ----------------- | ------------ | ----------- |");
-        for (uint256 i = 0; i < 4_000; i += 50) {
+        for (uint256 i; i < 4_000; i += 50) {
             bytes memory code = vm.randomBytes(i);
             code = _filterCode(code);
 
